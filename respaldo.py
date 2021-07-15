@@ -1,110 +1,4 @@
-from flask import Flask, jsonify, request, json
-import numpy as np
-import math as m
-import statistics as stats
-from scipy import signal
-from scipy.special import entr
-from flask_pymongo import PyMongo
-from bson import json_util
-from bson.objectid import ObjectId 
-from sklearn import preprocessing 
-from scipy.signal import find_peaks
-
-app = Flask(__name__)
-app.config['MONGO_URI'] = 'mongodb+srv://ppp:Poopoo2020*@ppp-cluster.pkcyd.gcp.mongodb.net/PPPDB?retryWrites=true&w=majority'
-mongo = PyMongo(app)
-
-
-@app.after_request
-def after_request(response):
-    response.headers["Access-Control-Allow-Origin"] = "*" # <- You can change "*" for a domain for example "http://localhost"
-    response.headers["Access-Control-Allow-Credentials"] = "true"
-    response.headers["Access-Control-Allow-Methods"] = "POST, GET, OPTIONS, PUT, DELETE"
-    response.headers["Access-Control-Allow-Headers"] = "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization"
-    return response
-
-@app.route("/datas", methods=["POST"])
-def addData():
-    new_data = {
-        "id_user": request.json["id_user"],
-        "id_little": request.json["id_little"],
-        "label": request.json["label"],
-        "frec": request.json["frec"],
-        "amp": request.json["amp"],
-        "pha": request.json["pha"],
-        "t": request.json["t"], #Temperature
-        "frecImp": request.json["frecImp"],
-        "real": request.json["real"],
-        "img": request.json["img"],
-        "imp": request.json["imp"],
-        "date": request.json["date"]
-    }
-    # # Tomar señal base de mongo
-    # signalBase = mongo.db.datas.find_one({'_id' : ObjectId('608ae18ac4a85b00171f409a')}) #El id corresponde al archivo base.
-    # signalBase = json.loads(json_util.dumps(signalBase))
-
-    # ampBase = signalBase["amp"]
-    # phaBase = signalBase["pha"]
-
-    # Adquisición datos y conversión en arrays
-    frec = new_data["frec"]
-    amp = new_data["amp"]
-    pha = new_data["pha"]
-    t = new_data["t"]
-    frecImp = new_data["frecImp"]
-    real = new_data["real"]
-    img = new_data["img"]
-    imp = new_data["imp"]
-
-    #Info de temperatura
-    temp = []
-    for i in range(len(t)):
-        temp.append(1.1351*(m.exp((0.0011*t[i]))))
-    tMean = stats.mean(temp)
-    tVar = stats.variance(temp)
-    tStd = stats.stdev(temp)
-
-    #Info de impedancia
-    impMean = stats.mean(imp)
-    impStd = stats.stdev(imp)
-    impVar = stats.variance(imp)
-
-    # Diccionarios salida por señal
-    ampData = {}
-    phaData = {}
-
-    # eliminación linea base
-    # ampNB = []
-    # phaNB = []
-
-    
-    # for i in range(len(ampBase)):
-    #     ampNB.append(amp[i]/ampBase[i])
-    # for i in range(len(phaBase)):
-    #     phaNB.append(pha[i]/phaBase[i])
-
-    ampNB = amp
-    phaNB = pha
-
-    # Normalización de señales
-    ampN = []
-    phaN = []
-
-    minpha = min(phaNB)
-    minamp = min(ampNB)
-    minsignalpha = []  
-    minsignalamp = []
-
-    for i in range(len(phaNB)):
-        minsignalpha.append(phaNB[i] - minpha)
-    for i in range(len(phaNB)):
-        phaN.append((phaNB[i] - minpha)/(max(minsignalpha)))
-    for i in range(len(ampNB)):
-        minsignalamp.append(ampNB[i] - minamp)
-    for i in range(len(ampNB)):
-        ampN.append((ampNB[i] - minamp)/(max(minsignalamp)))  
-
-    #Media, Varianza y desviación de vectores normalziados
+#Media, Varianza y desviación de vectores normalziados
     #Amp
     ampMean = stats.mean(ampN)
     ampVar = stats.variance(ampN)
@@ -133,11 +27,13 @@ def addData():
     countmaxpha = 0
     for i, j in dctpicospha.items():
         if j == 1:
+            print(i)
             countmaxpha += 1
             globalmaxpha[i] = j
             frecGloMaxPha = frec[i]
     
     if len(globalmaxpha) == 0:
+        print("flag")
         globalmaxpha[0] = 1
         frecGloMaxPha = frec[0]
 
@@ -151,6 +47,7 @@ def addData():
             frecGloMaxAmp = frec[i]
 
     if len(globalmaxamp) == 0:
+        print("flag")
         globalmaxamp[0] = 1
         frecGloMaxAmp = frec[0]
 
@@ -183,6 +80,7 @@ def addData():
             frecGloMinPha = frec[i]
 
     if len(globalminpha) == 0:
+        print("flag")
         globalminpha[0] = 1
         frecGloMinPha = frec[0]
 
@@ -200,6 +98,7 @@ def addData():
             frecGloMinAmp = frec[i]
 
     if len(globalminamp) == 0:
+        print("flag")
         globalminamp[0] = 1
         frecGloMinAmp = frec[0]
 
@@ -584,54 +483,6 @@ def addData():
     phaEulerMean = stats.mean(phaEuler)
     phaEulerVar = stats.variance(phaEuler)
     phaEulerStd = stats.stdev(phaEuler)
-
-    #Nuevas caracteristicas
-    Freq = frec
-    Amp = amp
-    Amp0 = 1.0
-
-    # Generar un vector de potencias para evaluar las señales 20*log(vout/vin)
-    Power = []
-    for i in range(len(Freq)):
-        aux = 20 * m.log10(Amp[i]/Amp0)
-        Power.append(abs(aux))
-
-    # Potencia máxima de la señal (C1)
-    max_pow = max(Power) #C1
-    max_index: int = Power.index(max_pow) 
-    # Frecuencia en donde se obtuvo esta potencia máxima(C2)
-    freq_max = Freq[max_index] #C2
-
-    # Potencia promedio de la señal (C3)
-    mean_pow = np.mean(Power) #C3
-
-    # Pendiente positiva del espectro (C4) e intercepto en y (C5)
-    x = Freq[0: max_index]
-    y = Power[0: max_index]
-    x_mean = np.mean(x)
-    y_mean = np.mean(y)
-    n = len(x)
-    num = 0.0
-    den = 0.0
-    for i in range(n):
-        num += ((x[i] - x_mean) * (y[i] - y_mean))
-        den += ((x[i] - x_mean) ** 2)
-    pendPos = num/den #C4
-    bPos = y_mean - (pendPos - x_mean) #C5
-
-    # Pendiente negativa del espectro (C6) e intercepto en y (C7)
-    x = Freq[max_index: len(Freq)]
-    y = Power[max_index: len(Power)]
-    x_mean = np.mean(x)
-    y_mean = np.mean(y)
-    n = len(x)
-    num = 0.0
-    den = 0.0
-    for i in range(n):
-        num += ((x[i] - x_mean) * (y[i] - y_mean))
-        den += ((x[i] - x_mean) ** 2)
-    pendNeg = num/den #C6
-    bNeg = y_mean - (pendNeg - x_mean) #C7
     
     # Creación de diccionarios
     ampData = {
@@ -674,6 +525,14 @@ def addData():
         "ampP201Std" : ampP201Std,
         "frecGloMaxAmp" : frecGloMaxAmp,
         "frecGloMinAmp" : frecGloMinAmp,
+        # "maxQ1Amp" : maxQ1Amp,
+        # "maxQ2Amp" : maxQ2Amp,
+        # "maxQ3Amp" : maxQ3Amp,
+        # "maxQ4Amp" : maxQ4Amp,
+        # "minQ1Amp" : minQ1Amp,
+        # "minQ2Amp" : minQ2Amp,
+        # "minQ3Amp" : minQ3Amp,
+        # "minQ4Amp" : minQ4Amp,
         "meanQ1PowAmp" : meanQ1PowAmp,
         "meanQ2PowAmp" : meanQ2PowAmp,
         "meanQ3PowAmp" : meanQ3PowAmp,
@@ -695,14 +554,7 @@ def addData():
         "tStd" : tStd,
         "impMean" : impMean,
         "impStd" : impStd,
-        "impVar" : impVar,
-        "max_pow" : max_pow,
-        "freq_max" : freq_max,
-        "pendPos" : pendPos,
-        "mean_pow" : mean_pow,
-        "bPos" : bPos,
-        "pendNeg" : pendNeg,
-        "bNeg" : bNeg,
+        "impVar" : impVar
     }
 
     phaData = {
@@ -785,42 +637,14 @@ def addData():
         "imp" : imp
     }
 
-    # with open("infoInToma90.json", "w") as file:
-    #     dicjs = json.dumps(new_data, indent=4)
-    #     file.write(dicjs)
+    with open("infoInToma66.json", "w") as file:
+        dicjs = json.dumps(new_data, indent=4)
+        file.write(dicjs)
 
-    # with open("ampToma90.json", "w") as file:
-    #     dicjs = json.dumps(ampData, indent=4)
-    #     file.write(dicjs)
+    with open("ampToma66.json", "w") as file:
+        dicjs = json.dumps(ampData, indent=4)
+        file.write(dicjs)
 
-    # with open("phaToma1.json", "w") as file:
-    #     dicjs = json.dumps(phaData, indent=4)
-    #     file.write(dicjs)
-
-    values = list(ampData.values())
-    vector = np.array(values)
-
-    # PCA
-    
-    # from sklearn.decomposition import PCA
-
-    # pca = PCA(0.95)
-    # pca_carac = pca.fit_transform(vector)
-
-    # Entrenar
-    import pickle
-    setPred = vector.reshape(1,-1)
-
-    loaded_model = pickle.load(open("model2.pkl", 'rb'))
-    result = loaded_model.predict(setPred)
-
-    outPut = list(result)
-
-    # return jsonify({"amp" : ampData, "pha" : phaData, "addInfo" : addInfo, "signalBase" : signalBase})
-    # return jsonify({"amp" : ampData, "pha" : phaData, "addInfo" : addInfo})
-    return jsonify({"label" : int(outPut[0])})
-
-
-
-if (__name__) == '__main__':
-    app.run(debug=True, port=4000)
+    with open("phaToma66.json", "w") as file:
+        dicjs = json.dumps(phaData, indent=4)
+        file.write(dicjs)
