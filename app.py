@@ -9,6 +9,8 @@ from bson import json_util
 from bson.objectid import ObjectId 
 from sklearn import preprocessing 
 from scipy.signal import find_peaks
+import pickle
+
 
 app = Flask(__name__)
 app.config['MONGO_URI'] = 'mongodb+srv://ppp:Poopoo2020*@ppp-cluster.pkcyd.gcp.mongodb.net/PPPDB?retryWrites=true&w=majority'
@@ -799,19 +801,15 @@ def addData():
 
     values = list(ampData.values())
     vector = np.array(values)
+    setTrain = vector.reshape(1,-1)
 
     # PCA
+    loaded_pca = pickle.load(open("pca.pkl", 'rb'))
+    setPred = loaded_pca.transform(setTrain)
     
-    # from sklearn.decomposition import PCA
+    # Predecir
 
-    # pca = PCA(0.95)
-    # pca_carac = pca.fit_transform(vector)
-
-    # Entrenar
-    import pickle
-    setPred = vector.reshape(1,-1)
-
-    loaded_model = pickle.load(open("model2.pkl", 'rb'))
+    loaded_model = pickle.load(open("model.pkl", 'rb'))
     result = loaded_model.predict(setPred)
 
     outPut = list(result)
